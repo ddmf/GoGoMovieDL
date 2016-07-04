@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"net/http"
+	"os"
 
 	"github.com/jmoiron/sqlx"
 
@@ -173,6 +174,14 @@ func main() {
 
 	//read global settings from file
 	ReadConfig()
+	
+	//Log to file
+	f, err := os.OpenFile("GoGoMovieDL.log", os.O_WRONLY | os.O_CREATE, 0755)
+	if err!=nil {
+		log.Panic("Main:LogFile:",err)
+	}
+	defer f.Close()
+	log.SetOutput(f)
 	log.SetLevel(log.DebugLevel)
 
 	//initialise database, create if not already created etc.
