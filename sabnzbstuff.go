@@ -193,7 +193,7 @@ func SABSendURL(guid string, nzblink string, nicename string) string {
 	log.Infof("SABSendURL:Grabbing:%s:%s", guid, nicename)
 	nzburl, err := url.Parse(MYSABURL)
 	if err != nil {
-		log.Debug(err)
+		log.Debug("SABSendURL:Parse:", err)
 		return ""
 	}
 	params := url.Values{}
@@ -206,7 +206,7 @@ func SABSendURL(guid string, nzblink string, nicename string) string {
 	SabR := new(SabResponse)
 	err = JsonFromURL(nzburl.String(), SabR)
 	if err != nil {
-		log.Debug(err)
+		log.Debug("SABSendURL:JSON:", err)
 		return ""
 	}
 

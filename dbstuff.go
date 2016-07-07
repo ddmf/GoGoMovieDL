@@ -264,7 +264,6 @@ func RSSIDExistsInDB(id int64) bool {
 		log.Debug("RSSIDExistsInDB:", err)
 		return false
 	default:
-		//log.Debugf("RSSIDExistsInDB:%d found named %s", id, title)
 		return true
 	}
 }
@@ -281,6 +280,45 @@ func TTtoID(tturl string) (id int64, err error) {
 		}
 	}
 	return id, nil
+}
+
+// delete items from db if doesn't exist in rs
+func DBRemoveMissingRSS2(rs *RSS2) (count int) {
+	//make map from rs
+	rsItems := make(map[int64]bool)
+	for _, mv := range rs.Items {
+		id, err := TTtoID(mv.Link)
+		if err != nil {
+			//do nothing
+		} else {
+			rsItems[id] = true
+		}
+	}
+
+	if len(rsItems) > 0 {
+		//get list of movies from db
+		movs := MoviesList(0)
+		for _, mov := range movs {
+			//is movie id in map?
+			_, ok := rsItems[mov.Id]
+			if !ok {
+				if DeleteMovieFromDB(mov.Id) {
+					log.Infof("Movie not in watchlist, removed %d : %s", mov.Id, mov.Title)
+					count = +1
+				}
+			}
+		}
+	}
+	return count
+}
+
+func DeleteMovieFromDB(movieid int64) bool {
+	_, err := db.Exec("delete from movies where id=?", movieid)
+	if err != nil {
+		return false
+	} else {
+		return true
+	}
 }
 
 // loop the imdb rss and if the
@@ -390,7 +428,6 @@ func GetScore(title string, usenetdate time.Time, nzbsize float64) (score float6
 	} else {
 		score = -10000.7
 	}
-	//log.Debugf("%s : nzbsize=%0.2f, nzbage=%d, gauss=%0.2f, decay=%0.2f, final score = %0.2f", title, nzbsize, nzbage, gauss, decay, score)
 	return score
 }
 

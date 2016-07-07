@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/urfave/negroni"
+	"gopkg.in/tylerb/graceful.v1"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -137,11 +138,9 @@ func GrabNZBHandler(w http.ResponseWriter, r *http.Request) {
 
 func LoggingMiddleware(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	start := time.Now()
-
 	next(rw, r)
-
 	res := rw.(negroni.ResponseWriter)
-	log.Infof("%s %s completed %v %s in %v", r.Method, r.URL.Path, res.Status(), http.StatusText(res.Status()), time.Since(start))
+	log.Debugf("%s %s completed %v %s in %v", r.Method, r.URL.Path, res.Status(), http.StatusText(res.Status()), time.Since(start))
 }
 
 func InitWebServer() {
@@ -162,9 +161,10 @@ func InitWebServer() {
 	n.Use(negroni.HandlerFunc(LoggingMiddleware))
 	n.UseHandler(muxrouter)
 
-	err := http.ListenAndServe(":5151", n)
+	log.Info("Webstuff:Listening on port 5151")
+	err := graceful.RunWithErr(":5151", 10*time.Second, n)
 	if err != nil {
-		log.Error("InitWebServer", err)
+		log.Fatal("InitWebServer:", err)
 	}
 }
 
@@ -175,36 +175,42 @@ func DefineTemplates() {
 	<head>
 		<meta charset="UTF-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
-		<title>{{.MovieName}}</title>
-		<link href="https://cdn.jsdelivr.net/min/1.5/min.min.css" rel="stylesheet" type="text/css">
+		<title>GoGoMovieDL - {{.MovieName}}</title>
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
+		<link href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/3.3.6/cosmo/bootstrap.min.css" rel="stylesheet" type="text/css">
+		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js" integrity="sha384-0mSbJDEHialfmuBBQP6A4Qrprq5OVfW37PRR3j5ELqxss1yVqOtnepnHVP9aJ7xS" crossorigin="anonymous"></script>
 		<link href="https://cdnjs.cloudflare.com/ajax/libs/foundicons/3.0.0/foundation-icons.min.css" rel="stylesheet" type="text/css">
+		<style type="text/css">
+			ra {text-align:right;}
+			la {text-align:left;}
+			ca {text-align:center;}
+		</style>
 	</head>
     <body>
 		<div class="container">
-		<p><a href="/">Home</a></p>
-		<h2>{{.MovieName}}</h2>
-		<table>
+			<div><h2><a href="/">GoGoMovieDL</a> - {{.MovieName}}</h2></div>
+		<table class="table table-striped table-hover ">
 		<thead>
 		<tr>
-			<th>Date</th>
-			<th>Title</th>
-			<th>Size</th>
-			<th>Score</th>
-			<th>Grabbed</th>
-			<th>Grab</th>
-			<th>Ignored</th>
+			<th class="ca">Date</th>
+			<th class="ca">Title</th>
+			<th class="ra">Size</th>
+			<th class="ra">Score</th>
+			<th class="ca">Grabbed</th>
+			<th class="ca">Grab</th>
+			<th class="ca">Active</th>
 		</tr>
 		</thead>
 		<tbody>
         {{range .NZBList}}
 		<tr>
-			<td>{{.UsenetDate.Format "02/01/2006" }}</td>
-			<td>{{.Title}}</td>
-			<td>{{ printf "%0.2fGb" .Size}}</td>
-			<td>{{ printf "%0.2f" .Score}}</td>
-			<td>{{.Grabbed}}</td>
-			<td><a href="{{.GrabURL}}"><i class="fi-download"></i></a></td>
-			<td>
+			<td class="ca">{{.UsenetDate.Format "02/01/2006" }}</td>
+			<td class="la">{{.Title}}</td>
+			<td class="ra">{{ printf "%0.2fGb" .Size}}</td>
+			<td class="ra">{{ printf "%0.2f" .Score}}</td>
+			<td class="ca">{{if eq .Grabbed 1}}<i class="fi-check"></i>{{end}}</td>
+			<td class="ca"><a href="{{.GrabURL}}"><i class="fi-download"></i></a></td>
+			<td class="ca">
 {{ if eq .Ignored 1 }}<a href="/ignorenzb/{{.MovieId}}/{{.Id}}/0/" title="Ignored - Click to unignore"><i class="fi-dislike"></i></a>{{else}}<a href="/ignorenzb/{{.MovieId}}/{{.Id}}/1/" title="Click to ignore"><i class="fi-like"></i></a>{{end}}
 			</td>
 		</tr>
@@ -221,34 +227,42 @@ func DefineTemplates() {
 		<meta charset="UTF-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>GoGoMoviesDL</title>
-		<link href="https://cdn.jsdelivr.net/min/1.5/min.min.css" rel="stylesheet" type="text/css">
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
+		<link href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/3.3.6/cosmo/bootstrap.min.css" rel="stylesheet" type="text/css">
+		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js" integrity="sha384-0mSbJDEHialfmuBBQP6A4Qrprq5OVfW37PRR3j5ELqxss1yVqOtnepnHVP9aJ7xS" crossorigin="anonymous"></script>
 		<link href="https://cdnjs.cloudflare.com/ajax/libs/foundicons/3.0.0/foundation-icons.min.css" rel="stylesheet" type="text/css">
+		<style type="text/css">
+			ra {text-align:right;}
+			la {text-align:left;}
+			ca {text-align:center;}
+		</style>
 	</head>
     <body>
 		<div class="container">
-		<table>
+			<div><h2><a href="/">GoGoMovieDL</a></h2></div>
+		<table class="table table-striped table-hover ">
 		<thead>
 		<tr>
-			<th>IMDB</th>
-			<th>Cover</th>
-			<th>Title</th>
-			<th>Grabbed</th>
-			<th>Refresh</th>
+			<th class="ca">IMDB</th>
+			<th class="ca">Cover</th>
+			<th class="ca">Title</th>
+			<th class="ca">Grabbed</th>
+			<th class="ca">Refresh</th>
 		</tr>
 		</thead>
 		<tbody>
 {{ range . }}
 		<tr>
-			<td><a target="_blank" rel="noopener noreferrer" href="http://www.imdb.com/title/tt{{ .Id }}"><i class="fi-projection-screen"></i></a></td>
+			<td class="ca"><a target="_blank" rel="noopener noreferrer" href="http://www.imdb.com/title/tt{{ .Id }}"><i class="fi-projection-screen"></i></a></td>
 	{{ if gt .NzbCount 0 }}
-			<td><a href="{{.MovieUrl}}">{{ .CoverUrl | safeHTML }}</a></td>
-			<td><a href="{{.MovieUrl}}">{{.Title}}</a></td>
+			<td class="ca"><a href="{{.MovieUrl}}">{{ .CoverUrl | safeHTML }}</a></td>
+			<td class="la"><a href="{{.MovieUrl}}">{{.Title}}</a></td>
 	{{ else }}
-			<td>{{ .CoverUrl | safeHTML }}</td>
-			<td>{{ .Title }}</td>
+			<td class="ca">{{ .CoverUrl | safeHTML }}</td>
+			<td class="la">{{ .Title }}</td>
 	{{ end }}
-			<td>{{if gt .Grabbed 0 }}<a href="/markungrabbed/{{ .Id }}/"><i class="fi-check"></a></i>{{end}}</td>
-			<td><a href="/refreshnzbs/{{.Id}}/"><i class="fi-refresh"></i></a></td>
+			<td class="ca">{{if gt .Grabbed 0 }}<a href="/markungrabbed/{{ .Id }}/"><i class="fi-check"></a></i>{{end}}</td>
+			<td class="ca"><a href="/refreshnzbs/{{.Id}}/"><i class="fi-refresh"></i></a></td>
 		</tr>
 {{end}}
 		</tbody>

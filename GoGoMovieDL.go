@@ -15,6 +15,7 @@ import (
 	_ "github.com/rogpeppe/go-charset/data"
 
 	log "github.com/Sirupsen/logrus"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
@@ -40,6 +41,62 @@ type Item struct {
 	Title   string `xml:"title"`
 	Link    string `xml:"link"`
 	PubDate string `xml:"pubDate"`
+}
+
+func main() {
+	var err error
+
+	//read global settings from file
+	ReadConfig()
+
+	//Log to file
+	f, err := os.OpenFile("./GoGoMovieDL.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
+	if err != nil {
+		log.Panic("Main:LogFile:", err)
+	}
+	defer f.Close()
+
+	log.SetOutput(f)
+	log.SetLevel(log.DebugLevel)
+
+	log.SetOutput(&lumberjack.Logger{
+		Filename:   "./GoGoMovieDL.log",
+		MaxSize:    1,
+		MaxBackups: 3,
+		MaxAge:     28,
+	})
+
+	log.Info("==============================================")
+
+	//initialise database, create if not already created etc.
+	err = InitDB()
+	if err != nil {
+		log.Panic("Main:InitDB", err)
+	}
+	defer db.Close()
+
+	//Start webserver in another channel, in case templates fail
+	go InitWebServer()
+
+	//Update Scores to support possible config preferred/bad changes
+	UpdateNZBScores()
+
+	//set up timed jobs
+	//will run every x minutes, as defined in file
+	gocron.Every(uint64(MYRSSCHECK)).Minutes().Do(RSS2WatchlistUpdate)
+	gocron.Every(uint64(MYMOVIESCHECK)).Minutes().Do(MostRecentMovieList)
+	gocron.Every(uint64(MYMOVIECHECK)).Minutes().Do(UnGrabbedMovies)
+
+	gocron.Every(2).Minutes().Do(DownloadGrabbableMovies)
+
+	//Also run on load
+	RSS2WatchlistUpdate()
+	MostRecentMovieList()
+	UnGrabbedMovies()
+	DownloadGrabbableMovies()
+
+	//Start Cronjobs
+	<-gocron.Start()
 }
 
 // main function to get IMDB RSS watchlist
@@ -71,13 +128,15 @@ func RSS2Feed(URL string) (*RSS2, error) {
 // Get the feed from the MYRSS2FEEDURL and
 // update the database
 func RSS2WatchlistUpdate() {
-	log.Info("RSS2WatchlistUpdate:Begin")
+	log.Info("RSS2WatchlistUpdate")
 	iv, err := RSS2Feed(MYRSS2FEEDURL)
 	if err != nil {
 		log.Errorln("Main:RSS2WatchlistUpdate:RSS2Feed:", err)
+		return
 	}
-	count := RSS2toDB(iv)
-	log.Infof("RSS2WatchlistUpdate:End:%d added", count)
+	added := RSS2toDB(iv)
+	removed := DBRemoveMissingRSS2(iv)
+	log.Infof("RSS2WatchlistUpdate:End:%d added, %d removed", added, removed)
 }
 
 // Get the latest movie list and if there are files
@@ -122,18 +181,13 @@ func UnGrabbedMovies() {
 
 // Download teh ungrabbed movies that have files attached
 func DownloadGrabbableMovies() {
-	log.Info("Main:DownloadGrabbableMovies:Begin")
-	//Parse History First to remove complete and allow
-	//us to get next if failed
+	//Parse History First to remove complete and allow us to get next if failed
 	SABParseHistory()
-	//Look for non grabbed movies with score>0 and not ignored or grabbed nzbs
-	//SABSendURL()
+	//Look for non grabbed nzbs with score>0 and not ignored or grabbed
 	gb := GrabbableList()
 	for _, gbb := range gb {
-		//log.Info(gbb.MovieId, gbb.Link, gbb.MovieTitle)
 		SABGrabAndMark(gbb.Id, gbb.MovieId)
 	}
-	log.Info("Main:DownloadGrabbableMovies:End")
 }
 
 func ReadConfig() {
@@ -149,11 +203,13 @@ func ReadConfig() {
 		MYBANNEDWORDS = config.Get("MYBANNEDWORDS").(string)
 		MYPREFERREDWORDS = config.Get("MYPREFERREDWORDS").(string)
 
+		//don't want to check any sooner than every 10 mins
 		MYRSSCHECK = config.Get("MYRSSCHECK").(int64)
 		if MYRSSCHECK < 10 {
 			MYRSSCHECK = 10
 		}
 
+		//don't want to check any sooner than every 120 mins
 		MYMOVIECHECK = config.Get("MYMOVIECHECK").(int64)
 		if MYMOVIECHECK < 120 {
 			MYMOVIECHECK = 120
@@ -166,51 +222,4 @@ func ReadConfig() {
 
 	}
 	log.Info("Main:ReadConfig:End")
-}
-
-func main() {
-
-	var err error
-
-	//read global settings from file
-	ReadConfig()
-	
-	//Log to file
-	f, err := os.OpenFile("GoGoMovieDL.log", os.O_WRONLY | os.O_CREATE, 0755)
-	if err!=nil {
-		log.Panic("Main:LogFile:",err)
-	}
-	defer f.Close()
-	log.SetOutput(f)
-	log.SetLevel(log.DebugLevel)
-
-	//initialise database, create if not already created etc.
-	err = InitDB()
-	if err != nil {
-		log.Panic("Main:InitDB", err)
-	}
-	defer db.Close()
-
-	//Start webserver in another channel, in case templates fail
-	go InitWebServer()
-
-	//Update Scores to support possible config preferred/bad changes
-	UpdateNZBScores()
-
-	//set up timed jobs
-	//will run every x minutes, as defined in file
-	gocron.Every(uint64(MYRSSCHECK)).Minutes().Do(RSS2WatchlistUpdate)
-	gocron.Every(uint64(MYMOVIESCHECK)).Minutes().Do(MostRecentMovieList)
-	gocron.Every(uint64(MYMOVIECHECK)).Minutes().Do(UnGrabbedMovies)
-
-	gocron.Every(2).Minutes().Do(DownloadGrabbableMovies)
-
-	//Also run on load
-	RSS2WatchlistUpdate()
-	MostRecentMovieList()
-	UnGrabbedMovies()
-	DownloadGrabbableMovies()
-
-	//Start Cronjobs
-	<-gocron.Start()
 }
