@@ -22,6 +22,7 @@ type Movie struct {
 	Grabbed    int
 	MovieUrl   string
 	NzbCount   int
+	IgnoreCount	int
 	Orderfield int
 }
 
@@ -373,9 +374,9 @@ func NzbListByMovie(MovieId int64, GrabbedStatus int, IgnoredStatus int) []NZB {
 func MoviesList(GrabbedStatus int) []Movie {
 	mv := []Movie{}
 	err := db.Select(&mv, `
-		select id,title,grabbed,coalesce(nzbcount,0) as nzbcount,coalesce(coverurl,'') as coverurl, case when (1-grabbed)*nzbcount>0 THEN 0 ELSE 1 END AS orderfield 
+		select id,title,grabbed,coalesce(nzbcount,0) as nzbcount,coalesce(ignorecount,0) as ignorecount,coalesce(coverurl,'') as coverurl, case when (1-grabbed)*(nzbcount-ignorecount)>0 THEN 0 ELSE 1 END AS orderfield 
 		from movies 
-		left outer join (select movieid,count(id) as nzbcount from nzbs group by movieid) as c on c.movieid=id
+		left outer join (select movieid,count(id) as nzbcount,sum(ignored) as ignorecount from nzbs group by movieid) as c on c.movieid=id
 		order by Orderfield,grabbed,title	
 	`)
 	if err != nil {

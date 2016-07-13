@@ -9,7 +9,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/urfave/negroni"
-	"gopkg.in/tylerb/graceful.v1"
+	//"gopkg.in/tylerb/graceful.v1"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -162,7 +162,8 @@ func InitWebServer() {
 	n.UseHandler(muxrouter)
 
 	log.Info("Webstuff:Listening on port 5151")
-	err := graceful.RunWithErr(":5151", 10*time.Second, n)
+	//err := graceful.RunWithErr(":5151", 10*time.Second, n)
+	err:=http.ListenAndServe(":5151",n)
 	if err != nil {
 		log.Fatal("InitWebServer:", err)
 	}
