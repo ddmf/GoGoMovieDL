@@ -22,6 +22,7 @@ var (
 	MYAPIKEY         string   //NZBGeek API
 	MYSABURL         string   //SABNZBD URL
 	MYSABAPI         string   //SABNZBD API Key
+	MYSABCAT	string //SABNZBD Category
 	MYRSS2FEEDURL    string   //RSS2 Watchlist URL
 	MYRSSCHECK       int64    //IMDB Watchlist Check Interval in minutes
 	MYMOVIECHECK     int64    //Specific Movie Check Interval in minutes
@@ -199,6 +200,7 @@ func ReadConfig() {
 		MYAPIKEY = config.Get("MYAPIKEY").(string)
 		MYSABURL = ReturnNiceSABURL(config.Get("MYSABURL").(string))
 		MYSABAPI = config.Get("MYSABAPI").(string)
+		MYSABCAT = config.Get("MYSABCAT").(string)
 		MYRSS2FEEDURL = config.Get("MYRSS2FEEDURL").(string)
 		MYBANNEDWORDS = config.Get("MYBANNEDWORDS").(string)
 		MYPREFERREDWORDS = config.Get("MYPREFERREDWORDS").(string)

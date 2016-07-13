@@ -130,9 +130,9 @@ func SABParseHistory() {
 					SetNZBGrabIgnore(dl.Guid, 1, 0)
 					RemoveDownloadFromDB(dl.Guid)
 					SABRemoveCompleted("history", slots.Nzo_id)
-					log.Infof("SABCompleted:Removed %s from downloads table with id %s", dl.Nicename, dl.DlId)
+					log.Infof("SABCompleted:Removed %s from downloads table with id %s /n/n %+v", dl.Nicename, dl.DlId, slots)
 				default:
-					log.Debugf("SABParseHistory:SlotStatus %s : Msg %s", slots.Status, slots.FailMessage)
+					//log.Debugf("SABParseHistory:SlotStatus %s : Msg %s", slots.Status, slots.FailMessage)
 				}
 			}
 		}
@@ -174,7 +174,7 @@ func SABGrabAndMark(guid string, movid int64) {
 	URL, NiceName := URLAndTitleFromDB(guid, movid)
 	//Send URL to SAB, returns trackable ID
 	if URL != "" {
-		Nzo_id := SABSendURL(guid, URL, NiceName)
+		Nzo_id := SABSendURL(guid, URL, NiceName, MYSABCAT)
 		if Nzo_id != "" {
 			//Mark as grabbed for NZB and Movie
 			SetNZBGrabIgnore(guid, 1, 0)
@@ -189,8 +189,8 @@ func SABGrabAndMark(guid string, movid int64) {
 }
 
 //Send the NZBLINK url to SAB with nicename as Name. Returns NZO_ID if valid
-func SABSendURL(guid string, nzblink string, nicename string) string {
-	log.Infof("SABSendURL:Grabbing:%s:%s", guid, nicename)
+func SABSendURL(guid string, nzblink string, nicename string, category string) string {
+	log.Infof("SABSendURL:Grabbing:%s:%s:%s", guid, category, nicename)
 	nzburl, err := url.Parse(MYSABURL)
 	if err != nil {
 		log.Debug("SABSendURL:Parse:", err)
@@ -202,6 +202,9 @@ func SABSendURL(guid string, nzblink string, nicename string) string {
 	params.Add("apikey", MYSABAPI)
 	params.Add("name", nzblink)
 	params.Add("nzbname", nicename)
+	if category!="" {
+		params.Add("cat",category)
+	}
 	nzburl.RawQuery = params.Encode()
 	SabR := new(SabResponse)
 	err = JsonFromURL(nzburl.String(), SabR)
