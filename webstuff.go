@@ -254,7 +254,7 @@ func DefineTemplates() {
 		<tbody>
 {{ range . }}
 		<tr>
-			<td class="ca"><a target="_blank" rel="noopener noreferrer" href="http://www.imdb.com/title/tt{{ .Id }}"><i class="fi-projection-screen"></i></a></td>
+			<td class="ca"><a target="_blank" rel="noopener noreferrer" href="http://www.imdb.com/title/tt{{ printf "%07d" .Id }}"><i class="fi-projection-screen"></i></a></td>
 	{{ if gt .NzbCount 0 }}
 			<td class="ca"><a href="{{.MovieUrl}}">{{ .CoverUrl | safeHTML }}</a></td>
 			<td class="la"><a href="{{.MovieUrl}}">{{.Title}}</a></td>
