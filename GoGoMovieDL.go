@@ -148,9 +148,10 @@ func MostRecentMovieList() {
 	nz, err := NZBGeekMovies(MYAPIKEY)
 	if err != nil {
 		log.Errorln("Main:MostRecentMovieList:NZBGeekMovies", err)
-	}
+	} else {
 	count := NZBGRSStoDB(nz)
 	log.Infof("Main:MostRecentMovieList:End:%d added", count)
+	}
 }
 
 // Only meant to be run rarely (4 times daily max) - this will scroll all our
