@@ -16,14 +16,14 @@ import (
 )
 
 type Movie struct {
-	Id         int64
-	Title      string
-	CoverUrl   string
-	Grabbed    int
-	MovieUrl   string
-	NzbCount   int
-	IgnoreCount	int
-	Orderfield int
+	Id          int64
+	Title       string
+	CoverUrl    string
+	Grabbed     int
+	MovieUrl    string
+	NzbCount    int
+	IgnoreCount int
+	Orderfield  int
 }
 
 type NZB struct {
@@ -58,7 +58,7 @@ type Grabbable struct {
 func InitDB() (err error) {
 
 	db = sqlx.MustConnect("sqlite3", "./GoGoMovieDL.db")
-	
+
 	sqlStmt := `
 	PRAGMA automatic_index = ON;
 	PRAGMA cache_size = 32768;
@@ -331,6 +331,7 @@ func RSS2toDB(rs *RSS2) (count int) {
 		log.Debug("RSS2DB:PrepareStmt", err)
 		return 0
 	}
+	defer stmt.Close()
 
 	for _, mv := range rs.Items {
 		//Get ID as INT64
