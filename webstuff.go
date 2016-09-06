@@ -1,3 +1,9 @@
+// todo - one of the clickies is a pain in the arse and doesn't
+// do anything, even moreso it adds to the backlist, so you have
+// to return twice if you want anything done.
+// i can't remember for the life of me which one though...
+// anyway, fix it with href='#!' and return false...
+
 package main
 
 import (
@@ -9,7 +15,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/urfave/negroni"
-	//"gopkg.in/tylerb/graceful.v1"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -162,8 +167,7 @@ func InitWebServer() {
 	n.UseHandler(muxrouter)
 
 	log.Info("Webstuff:Listening on port 5151")
-	//err := graceful.RunWithErr(":5151", 10*time.Second, n)
-	err:=http.ListenAndServe(":5151",n)
+	err := http.ListenAndServe(":5151", n)
 	if err != nil {
 		log.Fatal("InitWebServer:", err)
 	}

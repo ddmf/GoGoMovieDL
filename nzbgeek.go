@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-
-	//	log "github.com/Sirupsen/logrus"
 )
 
 type NZBGRSS struct {

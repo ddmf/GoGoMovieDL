@@ -22,7 +22,7 @@ var (
 	MYAPIKEY         string   //NZBGeek API
 	MYSABURL         string   //SABNZBD URL
 	MYSABAPI         string   //SABNZBD API Key
-	MYSABCAT	string //SABNZBD Category
+	MYSABCAT         string   //SABNZBD Category
 	MYRSS2FEEDURL    string   //RSS2 Watchlist URL
 	MYRSSCHECK       int64    //IMDB Watchlist Check Interval in minutes
 	MYMOVIECHECK     int64    //Specific Movie Check Interval in minutes
@@ -71,10 +71,10 @@ func main() {
 
 	//initialise database, create if not already created etc.
 	err = InitDB()
+	defer db.Close()
 	if err != nil {
 		log.Panic("Main:InitDB", err)
 	}
-	defer db.Close()
 
 	//Start webserver in another channel, in case templates fail
 	go InitWebServer()
@@ -149,8 +149,8 @@ func MostRecentMovieList() {
 	if err != nil {
 		log.Errorln("Main:MostRecentMovieList:NZBGeekMovies", err)
 	} else {
-	count := NZBGRSStoDB(nz)
-	log.Infof("Main:MostRecentMovieList:End:%d added", count)
+		count := NZBGRSStoDB(nz)
+		log.Infof("Main:MostRecentMovieList:End:%d added", count)
 	}
 }
 

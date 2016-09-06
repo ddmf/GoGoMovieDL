@@ -58,7 +58,7 @@ type Grabbable struct {
 func InitDB() (err error) {
 
 	db = sqlx.MustConnect("sqlite3", "./GoGoMovieDL.db")
-
+	
 	sqlStmt := `
 	PRAGMA automatic_index = ON;
 	PRAGMA cache_size = 32768;
