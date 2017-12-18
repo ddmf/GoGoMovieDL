@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/csv"
 	"encoding/xml"
 	"errors"
 	"net/http"
@@ -8,7 +9,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	"github.com/jasonlvhit/gocron"
+	//	"github.com/jasonlvhit/gocron"
 	"github.com/pelletier/go-toml"
 
 	"github.com/rogpeppe/go-charset/charset"
@@ -84,6 +85,7 @@ func main() {
 
 	//set up timed jobs
 	//will run every x minutes, as defined in file
+
 	gocron.Every(uint64(MYRSSCHECK)).Minutes().Do(RSS2WatchlistUpdate)
 	gocron.Every(uint64(MYMOVIESCHECK)).Minutes().Do(MostRecentMovieList)
 	gocron.Every(uint64(MYMOVIECHECK)).Minutes().Do(UnGrabbedMovies)
@@ -91,18 +93,55 @@ func main() {
 	gocron.Every(2).Minutes().Do(DownloadGrabbableMovies)
 
 	//Also run on load
+
 	RSS2WatchlistUpdate()
 	MostRecentMovieList()
 	UnGrabbedMovies()
 	DownloadGrabbableMovies()
 
 	//Start Cronjobs
-	<-gocron.Start()
+	//<-gocron.Start()
+}
+
+func CSV2Feed(URL string) (*RSS2, error) {
+	var Newitem Item
+
+	resp, err := http.Get(URL)
+	if err != nil {
+		log.Debug("CSV2Feed:HTTPGET", err)
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	reader := csv.NewReader(resp.Body)
+	reader.Comma = ','
+	data, err := reader.ReadAll()
+	if err != nil {
+		log.Debug("CSV2Feed:csvReader", err)
+		return nil, err
+	}
+
+	Newrss2 := new(RSS2)
+	for idx, row := range data {
+
+		//skip header
+		if idx == 0 {
+			continue
+		}
+
+		Newitem.Link = row[6]
+		Newitem.PubDate = row[2]
+		Newitem.Title = row[5]
+		Newrss2.Items = append(Newrss2.Items, Newitem)
+	}
+
+	return Newrss2, nil
 }
 
 // main function to get IMDB RSS watchlist
 // and return NZBGRSS structure
 func RSS2Feed(URL string) (*RSS2, error) {
+
 	r, err := http.Get(URL)
 	if err != nil {
 		log.Debug("RSS2Feed:HTTPGET", err)
@@ -113,6 +152,8 @@ func RSS2Feed(URL string) (*RSS2, error) {
 		log.Debug("RSS2Feed:HTTPRESPONSE=", r.StatusCode)
 		return nil, errors.New("Couldn't get rss feed, check url and check not private / no auth required.")
 	}
+
+	log.Printf("%+v", r)
 
 	iz := new(RSS2)
 	decoder := xml.NewDecoder(r.Body)
@@ -130,7 +171,7 @@ func RSS2Feed(URL string) (*RSS2, error) {
 // update the database
 func RSS2WatchlistUpdate() {
 	log.Info("RSS2WatchlistUpdate")
-	iv, err := RSS2Feed(MYRSS2FEEDURL)
+	iv, err := CSV2Feed(MYRSS2FEEDURL)
 	if err != nil {
 		log.Errorln("Main:RSS2WatchlistUpdate:RSS2Feed:", err)
 		return
