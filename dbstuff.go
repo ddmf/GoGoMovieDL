@@ -2,6 +2,7 @@
 package main
 
 import (
+	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -9,10 +10,7 @@ import (
 
 	"database/sql"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/mattn/go-sqlite3"
-
-	log "github.com/Sirupsen/logrus"
 )
 
 type Movie struct {
@@ -57,22 +55,12 @@ type Grabbable struct {
 
 func InitDB() (err error) {
 
-	db = sqlx.MustConnect("sqlite3", "./GoGoMovieDL.db")
+	db, err = sql.Open("sqlite3", "./GoGoMovieDL.db?cache=shared&_busy_timeout=500")
+	if err != nil {
+		log.Panic("Main:InitDB:", err)
+	}
 
 	sqlStmt := `
-	PRAGMA automatic_index = ON;
-	PRAGMA cache_size = 32768;
-	PRAGMA cache_spill = OFF;
-	PRAGMA foreign_keys = ON;
-	PRAGMA journal_size_limit = 67110000;
-	PRAGMA locking_mode = NORMAL;
-	PRAGMA page_size = 4096;
-	PRAGMA recursive_triggers = ON;
-	PRAGMA secure_delete = ON;
-	PRAGMA synchronous = NORMAL;
-	PRAGMA temp_store = MEMORY;
-	PRAGMA journal_mode = WAL;
-	PRAGMA wal_autocheckpoint = 16384;	
 
 	create table if not exists movies(
 		id integer not null primary key, 
@@ -106,7 +94,7 @@ func InitDB() (err error) {
 
 	_, err = db.Exec(sqlStmt)
 	if err != nil {
-		log.Debug(err)
+		log.Println(err)
 		return err
 	}
 	return nil
@@ -120,41 +108,41 @@ func UpdateNZBScores() {
 	var usenetdate time.Time
 	var score float64
 
-	log.Info("UpdateNZBScores:Begin")
+	log.Println("UpdateNZBScores:Begin")
 
 	updatestmt, err := db.Prepare("UPDATE nzbs SET score=? WHERE id=?")
 	if err != nil {
-		log.Debug("UpdateNZBScores:PrepareStmt", err)
+		log.Println("UpdateNZBScores:PrepareStmt", err)
 		return
 	}
 	rows, err := db.Query("select id,title,size,usenetdate from nzbs")
 	if err != nil {
-		log.Debug("UpdateNZBScores:Query", err)
+		log.Println("UpdateNZBScores:Query", err)
 		return
 	}
 	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&id, &title, &nzbsize, &usenetdate)
 		if err != nil {
-			log.Debug("UpdateNZBScores:RowScan", err)
+			log.Println("UpdateNZBScores:RowScan", err)
 		} else {
 			score = GetScore(title, usenetdate, nzbsize)
 			// update record in db with new score, fail and return if error
 			// we can always try again later.
 			_, err := updatestmt.Exec(score, id)
 			if err != nil {
-				log.Debug("UpdateNZBScores:UpdateScore", err)
+				log.Println("UpdateNZBScores:UpdateScore", err)
 				return
 			}
 		}
 	}
-	log.Info("UpdateNZBScores:End")
+	log.Println("UpdateNZBScores:End")
 }
 
 func UpdateCoverURL(id int64, coverurl string) {
 	_, err := db.Exec("UPDATE movies SET coverurl=? WHERE id=?", coverurl, id)
 	if err != nil {
-		log.Debug("UpdateCoverURL:", err)
+		log.Println("UpdateCoverURL:", err)
 	}
 }
 
@@ -174,7 +162,7 @@ func NZBGRSStoDB(nz *NZBGRSS) (count int) {
 
 	stmt, err := db.Prepare("INSERT INTO nzbs(id, movieid, title, link, score, size, grabs, grabbed, ignored, usenetdate) VALUES(?,?,?,?,?,?,?,?,?,?)")
 	if err != nil {
-		log.Debug("NZBGRSStoDB:PrepareStmt", err)
+		log.Println("NZBGRSStoDB:PrepareStmt", err)
 		return 0
 	}
 
@@ -225,11 +213,11 @@ func NZBGRSStoDB(nz *NZBGRSS) (count int) {
 			if err != nil {
 				sqlerr := err.(sqlite3.Error)
 				if sqlerr.Code != sqlite3.ErrConstraint {
-					log.Debugf("NZBGRSStoDB:ExecInsert:%d %s", sqlerr.Code, sqlerr.Error())
+					log.Printf("NZBGRSStoDB:ExecInsert:%d %s", sqlerr.Code, sqlerr.Error())
 				}
 			} else {
 				UpdateCoverURL(id, coverurl)
-				log.Infof("Found NZB id %s for %d %s with score %.0f", guid, id, mv.Title, score)
+				log.Printf("Found NZB id %s for %d %s with score %.0f", guid, id, mv.Title, score)
 				count += 1
 			}
 
@@ -262,7 +250,7 @@ func RSSIDExistsInDB(id int64) bool {
 	case err == sql.ErrNoRows:
 		return false
 	case err != nil:
-		log.Debug("RSSIDExistsInDB:", err)
+		log.Println("RSSIDExistsInDB:", err)
 		return false
 	default:
 		return true
@@ -304,7 +292,7 @@ func DBRemoveMissingRSS2(rs *RSS2) (count int) {
 			_, ok := rsItems[mov.Id]
 			if !ok {
 				if DeleteMovieFromDB(mov.Id) {
-					log.Infof("Movie not in watchlist, removed %d : %s", mov.Id, mov.Title)
+					log.Println("Movie not in watchlist, removed %d : %s", mov.Id, mov.Title)
 					count = +1
 				}
 			}
@@ -328,7 +316,7 @@ func DeleteMovieFromDB(movieid int64) bool {
 func RSS2toDB(rs *RSS2) (count int) {
 	stmt, err := db.Prepare("INSERT INTO movies(id, title, grabbed) VALUES(?,?,?)")
 	if err != nil {
-		log.Debug("RSS2DB:PrepareStmt", err)
+		log.Println("RSS2DB:PrepareStmt", err)
 		return 0
 	}
 	defer stmt.Close()
@@ -337,7 +325,7 @@ func RSS2toDB(rs *RSS2) (count int) {
 		//Get ID as INT64
 		id, err := TTtoID(mv.Link)
 		if err != nil {
-			log.Errorf("Couldn't find ID - %s %s %+v", mv.Title, mv.Link, err)
+			log.Printf("Couldn't find ID - %s %s %+v", mv.Title, mv.Link, err)
 		}
 
 		_, err = stmt.Exec(id, mv.Title, 0)
@@ -345,10 +333,10 @@ func RSS2toDB(rs *RSS2) (count int) {
 			//if err then cast to sqlite3.Error so we can ignore specific errors
 			sqlerr := err.(sqlite3.Error)
 			if sqlerr.Code != sqlite3.ErrConstraint {
-				log.Debugf("RSS2DB:ExecInsert:%d %s", sqlerr.Code, sqlerr.Error())
+				log.Printf("RSS2DB:ExecInsert:%d %s", sqlerr.Code, sqlerr.Error())
 			}
 		} else {
-			log.Infof("RSS2DB:Added Movie %s with ID:%d", mv.Title, id)
+			log.Printf("RSS2DB:Added Movie %s with ID:%d", mv.Title, id)
 			count += 1
 		}
 
@@ -357,49 +345,88 @@ func RSS2toDB(rs *RSS2) (count int) {
 }
 
 func NzbListByMovie(MovieId int64, GrabbedStatus int, IgnoredStatus int) []NZB {
-	mv := []NZB{}
-	err := db.Select(&mv, `
-		select n.id,n.movieid,m.title as moviename,n.title,link,score,size,grabs,usenetdate,n.grabbed,ignored 
+	var (
+		mv  NZB
+		mvs []NZB
+	)
+	rows, err := db.Query(`
+		select n.id,n.movieid,m.title as moviename,n.title,link,score,size,grabs
+		,usenetdate,n.grabbed,ignored 
 		from nzbs n
 		inner join movies m on m.id=n.movieid
 		where n.movieid=?
 		order by ignored,score desc	
 	`, MovieId)
 	if err != nil {
-		log.Error("DB:NzbListByMovie:", err)
+		log.Println("DB:NzbListByMovie:", err)
 		return nil
 	}
-	return mv
+
+	defer rows.Close()
+	for rows.Next() {
+		err = rows.Scan(&mv.Id, &mv.MovieId, &mv.MovieName, &mv.Title, &mv.Link, &mv.Score, &mv.Size, &mv.Grabs, &mv.UsenetDate, &mv.Grabbed, &mv.Ignored)
+		mvs = append(mvs, mv)
+	}
+
+	return mvs
 }
 
 func MoviesList(GrabbedStatus int) []Movie {
-	mv := []Movie{}
-	err := db.Select(&mv, `
+	var (
+		mv  Movie
+		mvs []Movie
+	)
+
+	rows, err := db.Query(`
+		PRAGMA read_uncommitted = 1;
 		select id,title,grabbed,coalesce(nzbcount,0) as nzbcount,coalesce(ignorecount,0) as ignorecount,coalesce(coverurl,'') as coverurl, case when (1-grabbed)*(nzbcount-ignorecount)>0 THEN 0 ELSE 1 END AS orderfield 
 		from movies 
 		left outer join (select movieid,count(id) as nzbcount,sum(ignored) as ignorecount from nzbs group by movieid) as c on c.movieid=id
 		order by Orderfield,grabbed,title	
 	`)
 	if err != nil {
-		log.Error("DB:MoviesList:", err)
+		log.Println("DB:MoviesList:", err)
 		return nil
 	}
-	return mv
+
+	defer rows.Close()
+	for rows.Next() {
+		err = rows.Scan(&mv.Id, &mv.Title, &mv.Grabbed, &mv.NzbCount, &mv.IgnoreCount, &mv.CoverUrl, &mv.Orderfield)
+		mvs = append(mvs, mv)
+	}
+
+	return mvs
 }
 
 func DownloadList(dlmethod string) []Downloads {
-	dl := []Downloads{}
-	err := db.Select(&dl, "select m.title as nicename,movieid,guid,dlid from downloads d inner join nzbs n on d.guid=n.id inner join movies m on m.id=n.movieid where dlmethod=?", dlmethod)
+	var (
+		dl  Downloads
+		dls []Downloads
+	)
+
+	rows, err := db.Query(`
+		select m.title as nicename,movieid,guid,dlid from downloads d inner join nzbs n on d.guid=n.id inner join movies m on m.id=n.movieid where dlmethod=?
+	`, dlmethod)
 	if err != nil {
-		log.Error("DB:DownloadList:", err)
+		log.Println("DB:DownloadList:", err)
 		return nil
 	}
-	return dl
+
+	defer rows.Close()
+	for rows.Next() {
+		err = rows.Scan(&dl.Nicename, &dl.MovieID, &dl.Guid, &dl.DlId)
+		dls = append(dls, dl)
+	}
+
+	return dls
 }
 
 func GrabbableList() []Grabbable {
-	gb := []Grabbable{}
-	err := db.Select(&gb, `
+	var (
+		gb  Grabbable
+		gbs []Grabbable
+	)
+	rows, err := db.Query(`
 		select n.movieid,m.title as movietitle, n.id, n.link from nzbs n 
 		inner join (select movieid,max(score) as maxscore from nzbs 
 		where score>0 and grabbed=0 and ignored=0 
@@ -408,10 +435,16 @@ func GrabbableList() []Grabbable {
 		where m.grabbed=0
 	`)
 	if err != nil {
-		log.Error("DB:GrabbableList:", err)
+		log.Println("DB:GrabbableList:", err)
 		return nil
 	}
-	return gb
+
+	defer rows.Close()
+	for rows.Next() {
+		err = rows.Scan(&gb.MovieId, &gb.MovieTitle, &gb.Id, &gb.Link)
+		gbs = append(gbs, gb)
+	}
+	return gbs
 }
 
 //Calculate score from nzb title, date and size
@@ -419,7 +452,7 @@ func GetScore(title string, usenetdate time.Time, nzbsize float64) (score float6
 	if nzbsize > 0.7 {
 		nzbage := int(time.Since(usenetdate).Hours() / 24)
 		// calculate score - gaussian distribution on size and exponential decay for age
-		gauss := 100 - math.Abs(math.Pow(nzbsize-7.5, 2)/(2*math.Pow(1.5, 2)))
+		gauss := 100 - math.Abs(math.Pow(nzbsize-4.5, 2)/(2*math.Pow(1.5, 2)))
 		decay := math.Pow(math.E, (-1*float64(nzbage))/180) * 100
 		// score is a combination of both - this means that slightly older files
 		// that are closer to 7.5Gb will have a slightly higher score than newer files
@@ -437,7 +470,7 @@ func GetScore(title string, usenetdate time.Time, nzbsize float64) (score float6
 func URLAndTitleFromDB(guid string, id int64) (nzburl string, nicename string) {
 	err := db.QueryRow("select title,n.link from nzbs n where n.id=? and movieid=?", guid, id).Scan(&nicename, &nzburl)
 	if err != nil {
-		log.Debug(err)
+		log.Print(err)
 		return "", ""
 	}
 	return nzburl, nicename
@@ -446,27 +479,27 @@ func URLAndTitleFromDB(guid string, id int64) (nzburl string, nicename string) {
 func SetNZBGrabIgnore(guid string, grabflag int, ignoreflag int) {
 	_, err := db.Exec("update nzbs set grabbed=?, ignored=? where id=?", grabflag, ignoreflag, guid)
 	if err != nil {
-		log.Debugf("SetNZBGrabIgnore:Grab=%d,Ignore=%d:%v", grabflag, ignoreflag, err)
+		log.Printf("SetNZBGrabIgnore:Grab=%d,Ignore=%d:%v", grabflag, ignoreflag, err)
 	}
 }
 
 func SetMovieGrab(id int64, grabflag int) {
 	_, err := db.Exec("update movies set grabbed=? where id=?", grabflag, id)
 	if err != nil {
-		log.Debugf("SetMovieGrab:Grab=%d,Id=%d:%v", grabflag, id, err)
+		log.Printf("SetMovieGrab:Grab=%d,Id=%d:%v", grabflag, id, err)
 	}
 }
 
 func MarkNZBDownload(Nzo_id string, guid string, Method string) {
 	_, err := db.Exec("INSERT into downloads (guid,dlmethod,dlid) values (?,?,?)", guid, Method, Nzo_id)
 	if err != nil {
-		log.Debugf("MarkNZBDownload:%v", err)
+		log.Printf("MarkNZBDownload:%v", err)
 	}
 }
 
 func RemoveDownloadFromDB(guid string) {
 	_, err := db.Exec("delete from downloads where guid=?", guid)
 	if err != nil {
-		log.Debugf("RemoveDownloadFromDB:%v", err)
+		log.Printf("RemoveDownloadFromDB:%v", err)
 	}
 }

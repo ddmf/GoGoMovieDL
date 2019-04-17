@@ -1,9 +1,10 @@
 MYAPIKEY = ""
 MYSABURL = "http://127.0.0.1:8080/sabnzdb/api"
 MYSABAPI = ""
+MYSABCAT = ""
 MYRSS2FEEDURL = ""
 MYRSSCHECK = 120
 MYMOVIECHECK = 479
 MYMOVIESCHECK = 16
-MYPREFERREDWORDS = "dts,unrated,extended"
-MYBANNEDWORDS = "tc.720p,HDTC,hd tc,xvid,cam,hevc,h265,x265,korsub,deutsch,german,hebsub,french,spanish,nl subs,hd-tc,hd-ts,dvd9,dvd5"
+MYPREFERREDWORDS = "dts,unrated,extended,x265,h265"
+MYBANNEDWORDS = "tc.720p,HDTC,hd tc,xvid,cam,hevc,korsub,deutsch,german,hebsub,french,spanish,nlsubs,nl subs,hd-tc,hd-ts,dvd9,dvd5"

@@ -3,12 +3,10 @@ package main
 
 import (
 	"encoding/json"
-	"time"
-	//	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
-
-	log "github.com/Sirupsen/logrus"
+	"time"
 )
 
 //Typical response from ADDURL
@@ -40,7 +38,7 @@ func ReturnNiceSABURL(AURL string) string {
 	//url should be in format http://host:port/sabnzbd/api
 	newurl, _ := url.Parse(AURL)
 	newurl.Path = "sabnzbd/api"
-	log.Info("ReturnNiceSABURL - ", newurl.String())
+	log.Println("ReturnNiceSABURL - ", newurl.String())
 	return newurl.String()
 }
 
@@ -54,14 +52,14 @@ func JsonFromURLNoStruct(url string) {
 
 	err = json.NewDecoder(r.Body).Decode(&f)
 	if err != nil {
-		log.Debug(err)
+		log.Println(err)
 	}
 
-	log.Debug(f)
+	//log.Print(f)
 
 	m := f.(map[string]interface{})
 
-	log.Debug(m)
+	//log.Print(m)
 
 	for k, v := range m {
 		switch vv := v.(type) {
@@ -94,7 +92,7 @@ func SABParseHistory() {
 	//http://localhost:8080/sabnzbd/api?apikey=&mode=history&output=json
 	saburl, err := url.Parse(MYSABURL)
 	if err != nil {
-		log.Debug(err)
+		log.Println(err)
 		return
 	}
 	params := url.Values{}
@@ -105,7 +103,7 @@ func SABParseHistory() {
 	sh := new(SabHistory)
 	err = JsonFromURL(saburl.String(), sh)
 	if err != nil {
-		log.Debugf("SABParseHistory:%s  %+v", saburl.String(), err)
+		log.Printf("SABParseHistory:%s  %+v", saburl.String(), err)
 		return
 	}
 
@@ -123,14 +121,14 @@ func SABParseHistory() {
 					SetNZBGrabIgnore(dl.Guid, 1, 1)
 					//delete download record from db
 					RemoveDownloadFromDB(dl.Guid)
-					log.Infof("SABFailed:Removed %s from downloads table with id %s", dl.Nicename, dl.DlId)
+					log.Printf("SABFailed:Removed %s from downloads table with id %s", dl.Nicename, dl.DlId)
 				case "Completed", "completed":
 					//download completed ok - delete item from list
 					SetMovieGrab(dl.MovieID, 1)
 					SetNZBGrabIgnore(dl.Guid, 1, 0)
 					RemoveDownloadFromDB(dl.Guid)
 					SABRemoveCompleted("history", slots.Nzo_id)
-					log.Infof("SABCompleted:Removed %s from downloads table with id %s /n/n %+v", dl.Nicename, dl.DlId, slots)
+					log.Printf("SABCompleted:Removed %s from downloads table with id %s /n/n %+v", dl.Nicename, dl.DlId, slots)
 				default:
 					//log.Debugf("SABParseHistory:SlotStatus %s : Msg %s", slots.Status, slots.FailMessage)
 				}
@@ -144,7 +142,7 @@ func SABRemoveCompleted(mode string, nzoid string) bool {
 	//http://localhost:8080/sabnzbd/api?apikey=&mode=history&name=delete&output=json&value=SABnzbd_nzo_urhpjt
 	saburl, err := url.Parse(MYSABURL)
 	if err != nil {
-		log.Debug(err)
+		log.Print(err)
 		return false
 	}
 	params := url.Values{}
@@ -162,7 +160,7 @@ func SABRemoveCompleted(mode string, nzoid string) bool {
 	SabR := new(SabResponse)
 	err = JsonFromURL(saburl.String(), SabR)
 	if err != nil {
-		log.Debugf("SABRemoveCompleted:Mode=%s:Error=%v", mode, err)
+		log.Printf("SABRemoveCompleted:Mode=%s:Error=%v", mode, err)
 		return false
 	}
 	return SabR.Status
@@ -190,10 +188,10 @@ func SABGrabAndMark(guid string, movid int64) {
 
 //Send the NZBLINK url to SAB with nicename as Name. Returns NZO_ID if valid
 func SABSendURL(guid string, nzblink string, nicename string, category string) string {
-	log.Infof("SABSendURL:Grabbing:%s:%s:%s", guid, category, nicename)
+	log.Printf("SABSendURL:Grabbing:%s:%s:%s", guid, category, nicename)
 	nzburl, err := url.Parse(MYSABURL)
 	if err != nil {
-		log.Debug("SABSendURL:Parse:", err)
+		log.Print("SABSendURL:Parse:", err)
 		return ""
 	}
 	params := url.Values{}
@@ -202,14 +200,14 @@ func SABSendURL(guid string, nzblink string, nicename string, category string) s
 	params.Add("apikey", MYSABAPI)
 	params.Add("name", nzblink)
 	params.Add("nzbname", nicename)
-	if category!="" {
-		params.Add("cat",category)
+	if category != "" {
+		params.Add("cat", category)
 	}
 	nzburl.RawQuery = params.Encode()
 	SabR := new(SabResponse)
 	err = JsonFromURL(nzburl.String(), SabR)
 	if err != nil {
-		log.Debug("SABSendURL:JSON:", err)
+		log.Print("SABSendURL:JSON:", err)
 		return ""
 	}
 
@@ -222,7 +220,7 @@ func SABSendURL(guid string, nzblink string, nicename string, category string) s
 			return ""
 		}
 	} else {
-		log.Debug("SABSendURL:SendReturnedError:", SabR.SabErr)
+		log.Print("SABSendURL:SendReturnedError:", SabR.SabErr)
 		return ""
 	}
 }

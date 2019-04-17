@@ -9,14 +9,13 @@ package main
 import (
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/urfave/negroni"
-
-	log "github.com/Sirupsen/logrus"
 )
 
 var (
@@ -28,7 +27,7 @@ var (
 func MoviesHandler(w http.ResponseWriter, r *http.Request) {
 	mvs := MoviesList(-1)
 	if mvs == nil {
-		log.Debug("Webstuff:MoviesHandler:GetMoviesList:NothingReturned")
+		log.Print("Webstuff:MoviesHandler:GetMoviesList:NothingReturned")
 		http.Error(w, "", 500)
 	} else {
 		//fixup the urls and cover img tags
@@ -41,12 +40,12 @@ func MoviesHandler(w http.ResponseWriter, r *http.Request) {
 
 		t, ok := templates["MoviesTPL"]
 		if !ok {
-			log.Debug("Webstuff:MoviesHandler:Parse")
+			log.Print("Webstuff:MoviesHandler:Parse")
 			http.Error(w, "TemplateDoesntExist", 500)
 		}
 		err := t.Execute(w, mvs)
 		if err != nil {
-			log.Debug("Webstuff:MoviesHandler:Execute:", err)
+			log.Print("Webstuff:MoviesHandler:Execute:", err)
 			http.Error(w, "Boom", 500)
 		}
 	}
@@ -82,7 +81,7 @@ func MovieHandler(w http.ResponseWriter, r *http.Request) {
 
 	t, ok := templates["MovieTPL"]
 	if !ok {
-		log.Debug("Webstuff:MoviesHandler:Parse")
+		log.Print("Webstuff:MoviesHandler:Parse")
 		http.Error(w, "TemplateDoesntExist", 500)
 	}
 
@@ -91,7 +90,7 @@ func MovieHandler(w http.ResponseWriter, r *http.Request) {
 
 	err = t.Execute(w, mv)
 	if err != nil {
-		log.Debug("Webstuff:MoviesHandler:Execute:", err)
+		log.Print("Webstuff:MoviesHandler:Execute:", err)
 		http.Error(w, "Boom", 500)
 	}
 
@@ -104,7 +103,7 @@ func RefreshNZBHandler(w http.ResponseWriter, r *http.Request) {
 	movid, _ := strconv.ParseInt(id, 10, 64)
 	nz, err := NZBGeekMovieByIMDB(movid, MYAPIKEY)
 	if err != nil {
-		log.Debug("RefreshNZBHandler:GetByID:", id, err)
+		log.Print("RefreshNZBHandler:GetByID:", id, err)
 	} else {
 		NZBGRSStoDB(nz)
 	}
@@ -145,11 +144,11 @@ func LoggingMiddleware(rw http.ResponseWriter, r *http.Request, next http.Handle
 	start := time.Now()
 	next(rw, r)
 	res := rw.(negroni.ResponseWriter)
-	log.Debugf("%s %s completed %v %s in %v", r.Method, r.URL.Path, res.Status(), http.StatusText(res.Status()), time.Since(start))
+	log.Printf("%s %s completed %v %s in %v", r.Method, r.URL.Path, res.Status(), http.StatusText(res.Status()), time.Since(start))
 }
 
 func InitWebServer() {
-	log.Info("Webstuff:Init:Begin")
+	log.Println("Webstuff:Init:Begin")
 	DefineTemplates()
 
 	muxrouter := mux.NewRouter()
@@ -166,10 +165,10 @@ func InitWebServer() {
 	n.Use(negroni.HandlerFunc(LoggingMiddleware))
 	n.UseHandler(muxrouter)
 
-	log.Info("Webstuff:Listening on port 5151")
+	log.Println("Webstuff:Listening on port 5151")
 	err := http.ListenAndServe(":5151", n)
 	if err != nil {
-		log.Fatal("InitWebServer:", err)
+		log.Print("InitWebServerFAILURE:", err)
 	}
 }
 

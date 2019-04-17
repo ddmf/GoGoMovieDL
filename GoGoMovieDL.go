@@ -4,33 +4,32 @@ import (
 	"encoding/csv"
 	"encoding/xml"
 	"errors"
+	"log"
 	"net/http"
-	"os"
 
-	"github.com/jmoiron/sqlx"
+	"database/sql"
 
-	//	"github.com/jasonlvhit/gocron"
+	"github.com/jasonlvhit/gocron"
 	"github.com/pelletier/go-toml"
+
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/rogpeppe/go-charset/charset"
 	_ "github.com/rogpeppe/go-charset/data"
-
-	log "github.com/Sirupsen/logrus"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
-	MYAPIKEY         string   //NZBGeek API
-	MYSABURL         string   //SABNZBD URL
-	MYSABAPI         string   //SABNZBD API Key
-	MYSABCAT         string   //SABNZBD Category
-	MYRSS2FEEDURL    string   //RSS2 Watchlist URL
-	MYRSSCHECK       int64    //IMDB Watchlist Check Interval in minutes
-	MYMOVIECHECK     int64    //Specific Movie Check Interval in minutes
-	MYMOVIESCHECK    int64    //Recent Movies Check Interval in minutes
-	MYPREFERREDWORDS string   //Preferred words list, comma separated
-	MYBANNEDWORDS    string   //Banned words list, comma separated
-	db               *sqlx.DB //Global DB Handle
+	MYAPIKEY         string  //NZBGeek API
+	MYSABURL         string  //SABNZBD URL
+	MYSABAPI         string  //SABNZBD API Key
+	MYSABCAT         string  //SABNZBD Category
+	MYRSS2FEEDURL    string  //RSS2 Watchlist URL
+	MYRSSCHECK       int64   //IMDB Watchlist Check Interval in minutes, recommend 120
+	MYMOVIECHECK     int64   //Specific Movie Check Interval in minutes, recommend 400
+	MYMOVIESCHECK    int64   //Recent Movies Check Interval in minutes, recommend 16 mins
+	MYPREFERREDWORDS string  //Preferred words list, comma separated, increase score
+	MYBANNEDWORDS    string  //Banned words list, comma separated, kill score
+	db               *sql.DB //Global DB Handle
 )
 
 type RSS2 struct {
@@ -48,27 +47,17 @@ type Item struct {
 func main() {
 	var err error
 
+	//Log to file
+	log.SetOutput(&lumberjack.Logger{
+		Filename: "./GoGoMovieDL.log",
+		MaxSize:  32, //MB
+	})
+	log.Println("==============================================")
+	log.Println("==============================================")
+	log.Println("==============================================")
+
 	//read global settings from file
 	ReadConfig()
-
-	//Log to file
-	f, err := os.OpenFile("./GoGoMovieDL.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
-	if err != nil {
-		log.Panic("Main:LogFile:", err)
-	}
-	defer f.Close()
-
-	log.SetOutput(f)
-	log.SetLevel(log.DebugLevel)
-
-	log.SetOutput(&lumberjack.Logger{
-		Filename:   "./GoGoMovieDL.log",
-		MaxSize:    1,
-		MaxBackups: 3,
-		MaxAge:     28,
-	})
-
-	log.Info("==============================================")
 
 	//initialise database, create if not already created etc.
 	err = InitDB()
@@ -96,11 +85,10 @@ func main() {
 
 	RSS2WatchlistUpdate()
 	MostRecentMovieList()
-	UnGrabbedMovies()
 	DownloadGrabbableMovies()
 
 	//Start Cronjobs
-	//<-gocron.Start()
+	<-gocron.Start()
 }
 
 func CSV2Feed(URL string) (*RSS2, error) {
@@ -108,7 +96,7 @@ func CSV2Feed(URL string) (*RSS2, error) {
 
 	resp, err := http.Get(URL)
 	if err != nil {
-		log.Debug("CSV2Feed:HTTPGET", err)
+		log.Println("CSV2Feed:HTTPGET", err)
 		return nil, err
 	}
 
@@ -117,7 +105,7 @@ func CSV2Feed(URL string) (*RSS2, error) {
 	reader.Comma = ','
 	data, err := reader.ReadAll()
 	if err != nil {
-		log.Debug("CSV2Feed:csvReader", err)
+		log.Println("CSV2Feed:csvReader", err)
 		return nil, err
 	}
 
@@ -144,12 +132,12 @@ func RSS2Feed(URL string) (*RSS2, error) {
 
 	r, err := http.Get(URL)
 	if err != nil {
-		log.Debug("RSS2Feed:HTTPGET", err)
+		log.Println("RSS2Feed:HTTPGET", err)
 		return nil, err
 	}
 
 	if r.StatusCode != 200 {
-		log.Debug("RSS2Feed:HTTPRESPONSE=", r.StatusCode)
+		log.Println("RSS2Feed:HTTPRESPONSE=", r.StatusCode)
 		return nil, errors.New("Couldn't get rss feed, check url and check not private / no auth required.")
 	}
 
@@ -160,7 +148,7 @@ func RSS2Feed(URL string) (*RSS2, error) {
 	decoder.CharsetReader = charset.NewReader
 	err = decoder.Decode(&iz)
 	if err != nil {
-		log.Debug("RSS2Feed:UNMARSHAL", err)
+		log.Println("RSS2Feed:UNMARSHAL", err)
 		return nil, err
 	}
 
@@ -170,56 +158,65 @@ func RSS2Feed(URL string) (*RSS2, error) {
 // Get the feed from the MYRSS2FEEDURL and
 // update the database
 func RSS2WatchlistUpdate() {
-	log.Info("RSS2WatchlistUpdate")
+	log.Println("RSS2WatchlistUpdate")
 	iv, err := CSV2Feed(MYRSS2FEEDURL)
 	if err != nil {
-		log.Errorln("Main:RSS2WatchlistUpdate:RSS2Feed:", err)
+		log.Println("Main:RSS2WatchlistUpdate:RSS2Feed:", err)
 		return
 	}
 	added := RSS2toDB(iv)
 	removed := DBRemoveMissingRSS2(iv)
-	log.Infof("RSS2WatchlistUpdate:End:%d added, %d removed", added, removed)
+	log.Printf("RSS2WatchlistUpdate:End:%d added, %d removed", added, removed)
 }
 
 // Get the latest movie list and if there are files
 // for movies we have then add them
 func MostRecentMovieList() {
 	//LATEST MOVIES
-	log.Info("Main:MostRecentMovieList:Begin")
+	log.Println("Main:MostRecentMovieList:Begin")
 	nz, err := NZBGeekMovies(MYAPIKEY)
 	if err != nil {
-		log.Errorln("Main:MostRecentMovieList:NZBGeekMovies", err)
+		log.Println("Main:MostRecentMovieList:NZBGeekMovies", err)
 	} else {
 		count := NZBGRSStoDB(nz)
-		log.Infof("Main:MostRecentMovieList:End:%d added", count)
+		log.Printf("Main:MostRecentMovieList:End:%d added", count)
 	}
 }
 
 // Only meant to be run rarely (4 times daily max) - this will scroll all our
 // ungrabbed movies and will see if there are any files available
 func UnGrabbedMovies() {
-	log.Info("Main:UnGrabbedMovies:Begin")
-	var id int64
-	rows, err := db.Query("select distinct id from movies where grabbed=0")
+	var (
+		id  int64
+		ids []int64
+	)
+	log.Println("Main:UnGrabbedMovies:Begin")
+	rows, err := db.Query(`
+		PRAGMA read_uncommitted = 1;
+		select distinct id from movies where grabbed=0
+	`)
 	if err != nil {
-		log.Error("Main:UnGrabbedMovies:Query", err)
+		log.Println("Main:UnGrabbedMovies:Query", err)
 		return
 	}
 	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&id)
 		if err != nil {
-			log.Error("Main:UnGrabbedMovies:RowScan", err)
+			log.Println("Main:UnGrabbedMovies:RowScan", err)
+		}
+		ids = append(ids, id)
+	}
+
+	for _, id := range ids {
+		nz, err := NZBGeekMovieByIMDB(id, MYAPIKEY)
+		if err != nil {
+			log.Println("UngrabbedMovies:GetByID", err)
 		} else {
-			nz, err := NZBGeekMovieByIMDB(id, MYAPIKEY)
-			if err != nil {
-				log.Debug("UngrabbedMovies:GetByID", err)
-			} else {
-				NZBGRSStoDB(nz)
-			}
+			NZBGRSStoDB(nz)
 		}
 	}
-	log.Info("Main:UnGrabbedMovies:End")
+	log.Println("Main:UnGrabbedMovies:End")
 }
 
 // Download teh ungrabbed movies that have files attached
@@ -234,7 +231,7 @@ func DownloadGrabbableMovies() {
 }
 
 func ReadConfig() {
-	log.Info("Main:ReadConfig:Begin")
+	log.Println("Main:ReadConfig:Begin")
 	config, err := toml.LoadFile("GoGoMovieDL.conf")
 	if err != nil {
 		log.Panic("ReadConfig:", err)
@@ -265,5 +262,5 @@ func ReadConfig() {
 		}
 
 	}
-	log.Info("Main:ReadConfig:End")
+	log.Println("Main:ReadConfig:End")
 }
