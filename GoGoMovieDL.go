@@ -67,7 +67,7 @@ func main() {
 	}
 
 	//Start webserver in another channel, in case templates fail
-	go InitWebServer()
+	InitWebServer()
 
 	//Update Scores to support possible config preferred/bad changes
 	UpdateNZBScores()

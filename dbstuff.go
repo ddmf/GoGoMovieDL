@@ -55,7 +55,7 @@ type Grabbable struct {
 
 func InitDB() (err error) {
 
-	db, err = sql.Open("sqlite3", "./GoGoMovieDL.db?cache=shared&_busy_timeout=500")
+	db, err = sql.Open("sqlite3", "./GoGoMovieDL.db?mode=rwc&_busy_timeout=5000")
 	if err != nil {
 		log.Panic("Main:InitDB:", err)
 	}
@@ -112,7 +112,12 @@ func UpdateNZBScores() {
 
 	updatestmt, err := db.Prepare("UPDATE nzbs SET score=? WHERE id=?")
 	if err != nil {
-		log.Println("UpdateNZBScores:PrepareStmt", err)
+		log.Println("UpdateNZBScores:PrepareUpdateStmt", err)
+		return
+	}
+	updateignorestmt, err := db.Prepare("UPDATE nzbs SET score=?, ignored=1 WHERE id=?")
+	if err != nil {
+		log.Println("UpdateNZBScores:PrepareUpdateIgnoreStmt", err)
 		return
 	}
 	rows, err := db.Query("select id,title,size,usenetdate from nzbs")
@@ -129,11 +134,20 @@ func UpdateNZBScores() {
 			score = GetScore(title, usenetdate, nzbsize)
 			// update record in db with new score, fail and return if error
 			// we can always try again later.
-			_, err := updatestmt.Exec(score, id)
-			if err != nil {
-				log.Println("UpdateNZBScores:UpdateScore", err)
-				return
+			if score > 0 {
+				_, err := updatestmt.Exec(score, id)
+				if err != nil {
+					log.Println("UpdateNZBScores:UpdateAboveZeroScore", err)
+					return
+				}
+			} else {
+				_, err := updateignorestmt.Exec(score, id)
+				if err != nil {
+					log.Println("UpdateNZBScores:UpdateUnderZeroScore", err)
+					return
+				}
 			}
+
 		}
 	}
 	log.Println("UpdateNZBScores:End")
@@ -153,6 +167,7 @@ func UpdateCoverURL(id int64, coverurl string) {
 func NZBGRSStoDB(nz *NZBGRSS) (count int) {
 	var id int64
 	var grabs int
+	var ignoreval int
 	var size float64
 	var coverurl string
 	var guid string
@@ -209,7 +224,12 @@ func NZBGRSStoDB(nz *NZBGRSS) (count int) {
 		if RSSIDExistsInDB(id) {
 			usenetdt, _ = time.Parse("Mon, 02 Jan 2006 15:04:05 -0700", usenetdate)
 			score = GetScore(mv.Title, usenetdt, size)
-			_, err := stmt.Exec(guid, id, mv.Title, mv.Link, score, size, grabs, 0, 0, usenetdt.Format(time.RFC3339))
+			if score > 0 {
+				ignoreval = 0
+			} else {
+				ignoreval = 1
+			}
+			_, err := stmt.Exec(guid, id, mv.Title, mv.Link, score, size, grabs, 0, ignoreval, usenetdt.Format(time.RFC3339))
 			if err != nil {
 				sqlerr := err.(sqlite3.Error)
 				if sqlerr.Code != sqlite3.ErrConstraint {

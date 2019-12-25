@@ -45,10 +45,10 @@ func NZBGeekRSS(URL string, APIKey string) (*NZBGRSS, error) {
 	NewURL := fmt.Sprintf("https://api.nzbgeek.info/rss?%s&r=%s", URL, APIKey)
 
 	r, err := http.Get(NewURL)
-	defer r.Body.Close()
 	if err != nil {
 		return nil, err
 	}
+	defer r.Body.Close()
 
 	nz := new(NZBGRSS)
 	body, err := ioutil.ReadAll(r.Body)
